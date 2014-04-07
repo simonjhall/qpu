@@ -24,6 +24,66 @@ enum ConditionCode
 	kCclear
 };
 
+enum Signal
+{
+	kBreakpoint = 0,
+	kNoSignal,
+	kThreadSwitch,
+	kProgramEnd,
+	kScoreboardWait,
+	kScoreboardUnlock,
+	kLastThreadSwitch,
+	kCoverageLoad,
+	kColourLoad,
+	kColourLoadPe,
+	kLoadTmu0,
+	kLoadTmu1,
+	kAlphaMaskLoad,
+	kSmallImmOrVecRot,
+	kLoadImm,
+	kBranch,
+};
+
+enum AddOp
+{
+	kAddNop = 0,
+	kFadd,
+	kFsub,
+	kFmin,
+	kFmax,
+	kFminAbs,
+	kFmaxAbs,
+	kFtoi,
+	kItof,
+	kAdd = 12,
+	kSub,
+	kShr,
+	kAsr,
+	kRor,
+	kShl,
+	kMin,
+	kMax,
+	kAnd,
+	kOr,
+	kXor,
+	kNot,
+	kClz,
+	kV8addsAdd = 30,
+	kV8subsAdd,
+};
+
+enum MulOp
+{
+	kMulNop = 0,
+	kFmul,
+	kMul24,
+	kV8muld,
+	kV8min,
+	kV8max,
+	kV8addsMul,
+	kV8subsMul,
+};
+
 const char *pConditionCodeNames[8] = {
 		"never",
 		"always",
@@ -35,111 +95,220 @@ const char *pConditionCodeNames[8] = {
 		"c clear",
 };
 
+const char *pSignalNames[16] = {
+		"Breakpoint",
+		"NoSignal",
+		"ThreadSwitch",
+		"ProgramEnd",
+		"ScoreboardWait",
+		"ScoreboardUnlock",
+		"LastThreadSwitch",
+		"CoverageLoad",
+		"ColourLoad",
+		"ColourLoadPe",
+		"LoadTmu0",
+		"LoadTmu1",
+		"AlphaMaskLoad",
+		"SmallImmOrVecRot",
+		"LoadImm",
+		"Branch",
+};
+
+const char *pAddOpNames[32] = {
+	"AddNop",
+	"Fadd",
+	"Fsub",
+	"Fmin",
+	"Fmax",
+	"FminAbs",
+	"FmaxAbs",
+	"Ftoi",
+	"Itof",
+	"RESERVED",
+	"RESERVED",
+	"RESERVED",
+	"Add",
+	"Sub",
+	"Shr",
+	"Asr",
+	"Ror",
+	"Shl",
+	"Min",
+	"Max",
+	"And",
+	"Or",
+	"Xor",
+	"Not",
+	"Clz",
+	"RESERVED",
+	"RESERVED",
+	"RESERVED",
+	"RESERVED",
+	"RESERVED",
+	"V8adds",
+	"V8subs",
+};
+
+const char *pMulOpNames[8] = {
+	"MulNop",
+	"Fmul",
+	"Mul24",
+	"V8muld",
+	"V8min",
+	"V8max",
+	"V8adds",
+	"V8subs",
+};
+
 void packunpack(uint64_t dword)
 {
-	if ((dword >> 56) & 1)
-	{
-		printf("pm=1 ");
-	}
-	else
-		printf("pm=0 ");
-
 	uint64_t pack, unpack;
 
 	pack = (dword >> 52) & 0xf;
 	unpack = (dword >> 57) & 0x7;
 
-	printf("pack %2lx unpack %lx ", pack, unpack);
+	if (pack || unpack)
+	{
+		if ((dword >> 56) & 1)
+		{
+			printf("pm=1 ");
+		}
+		else
+			printf("pm=0 ");
+
+		printf("pack %2lx unpack %lx ", pack, unpack);
+	}
 }
 
-void cond_add_mul(uint64_t dword)
+void cond_add_mul(uint64_t dword, ConditionCode &rAdd, ConditionCode &rMul)
 {
 	uint64_t add = (dword >> 49) & 0x7;
 	uint64_t mul = (dword >> 46) & 0x7;
+
+	rAdd = (ConditionCode)add;
+	rMul = (ConditionCode)mul;
 
 	printf("cond_add=%s cond_mul=%s ", pConditionCodeNames[add], pConditionCodeNames[mul]);
 }
 
 void set_flags(uint64_t dword)
 {
-	printf("sf=%ld ", (dword >> 45) & 1);
+	if ((dword >> 45) & 1)
+		printf("sf=%ld ", (dword >> 45) & 1);
 }
 
-void write_swap(uint64_t dword)
+bool write_swap(uint64_t dword)
 {
-	printf("ws=%ld ", (dword >> 44) & 1);
+	if ((dword >> 44) & 1)
+		printf("ws=%ld ", (dword >> 44) & 1);
+	return (bool)((dword >> 44) & 1);
 }
 
-void waddr(uint64_t dword)
+void waddr(uint64_t dword, bool swap, ConditionCode enableA, ConditionCode enableB)
 {
-	printf("add=%2ld mul=%2ld", (dword >> 38) & 63, (dword >> 32) & 63);
+	if (enableA != kNever)
+		printf("add=%c%ld ", swap ? 'B' : 'A', (dword >> 38) & 63);
+
+	if (enableB != kNever)
+		printf("mul=%c%ld ", swap ? 'A' : 'B', (dword >> 32) & 63);
+}
+
+void immediate32(uint64_t dword)
+{
+	printf("imm32=%lx/%ld ",
+			dword & 0xffffffff,
+			dword & 0xffffffff);
+}
+
+void signal(uint64_t dword)
+{
+	if ((Signal)(dword >> 60) != kNoSignal)
+		printf("sig=%s ", pSignalNames[dword >> 60]);
+}
+
+void op_mul_add(uint64_t dword, ConditionCode enableA, ConditionCode enableB)
+{
+	if (enableA != kNever)
+		printf("addop=%s ", pAddOpNames[(dword >> 24) & 31]);
+	if (enableB != kNever)
+		printf("mulop=%s ", pMulOpNames[(dword >> 29) & 7]);
+
+	if (enableA == kNever && enableB == kNever)
+		printf("nop \n");
 }
 
 void disassemble(uint64_t dword)
 {
+	ConditionCode addCc, mulCc;
+
 	if ((dword >> 57) == 0x74)
 	{
 		printf("semaphore\n");
 		packunpack(dword);
-		cond_add_mul(dword);
+		cond_add_mul(dword, addCc, mulCc);
 		set_flags(dword);
 		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
 		printf("\n");
 	}
 	else if ((dword >> 57) == 0x73)
 	{
 		printf("load imm per-elmt unsigned\n");
 		packunpack(dword);
-		cond_add_mul(dword);
+		cond_add_mul(dword, addCc, mulCc);
 		set_flags(dword);
-		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
 		printf("\n");
 	}
 	else if ((dword >> 57) == 0x71)
 	{
 		printf("load imm per-elmt signed\n");
 		packunpack(dword);
-		cond_add_mul(dword);
+		cond_add_mul(dword, addCc, mulCc);
 		set_flags(dword);
 		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
 		printf("\n");
 	}
 	else if ((dword >> 57) == 0x70)
 	{
 		printf("load imm 32\n");
 		packunpack(dword);
-		cond_add_mul(dword);
+		cond_add_mul(dword, addCc, mulCc);
 		set_flags(dword);
 		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
+		immediate32(dword);
 		printf("\n");
 	}
 	else if (((dword >> 57) & 0x78) == 0x78)
 	{
 		printf("branch\n");
 		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), kAlways, kAlways);
 		printf("\n");
 	}
 	else if (((dword >> 57) & 0x78) == 0x68)
 	{
 		printf("alu small imm\n");
 		packunpack(dword);
-		cond_add_mul(dword);
+		cond_add_mul(dword, addCc, mulCc);
 		set_flags(dword);
 		write_swap(dword);
-		waddr(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
+		op_mul_add(dword, addCc, mulCc);
 		printf("\n");
 	}
 	else
 	{
 		printf("alu\n");
 		packunpack(dword);
-		cond_add_mul(dword);
-		waddr(dword);
+		cond_add_mul(dword, addCc, mulCc);
+		set_flags(dword);
+		write_swap(dword);
+		waddr(dword, write_swap(dword), addCc, mulCc);
+		signal(dword);
+		op_mul_add(dword, addCc, mulCc);
 		printf("\n");
 	}
 }

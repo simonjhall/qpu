@@ -249,14 +249,17 @@ void signal(uint64_t dword)
 		printf("sig=%s ", pSignalNames[dword >> 60]);
 }
 
-void op_mul_add(uint64_t dword, ConditionCode enableA, ConditionCode enableB)
+void op_mul_add(uint64_t dword, ConditionCode enableA, ConditionCode enableB, AddOp &rAdd, MulOp &rMul)
 {
-	if (enableA != kNever)
+	rAdd = (AddOp)((dword >> 24) & 31);
+	rMul = (MulOp)((dword >> 29) & 7);
+
+	if (!(enableA == kNever && rAdd == kAddNop))
 		printf("addop=%s ", pAddOpNames[(dword >> 24) & 31]);
-	if (enableB != kNever)
+	if (!(enableB == kNever && rMul == kMulNop))
 		printf("mulop=%s ", pMulOpNames[(dword >> 29) & 7]);
 
-	if (enableA == kNever && enableB == kNever)
+	if (rAdd == kAddNop && rMul == kMulNop)
 		printf("nop \n");
 }
 
@@ -270,6 +273,8 @@ MuxEncoding mux_decode(uint64_t section)
 void disassemble(uint64_t dword)
 {
 	ConditionCode addCc, mulCc;
+	AddOp addOp;
+	MulOp mulOp;
 
 	if ((dword >> 57) == 0x74)
 	{
@@ -326,9 +331,9 @@ void disassemble(uint64_t dword)
 		set_flags(dword);
 		write_swap(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc);
-		op_mul_add(dword, addCc, mulCc);
+		op_mul_add(dword, addCc, mulCc, addOp, mulOp);
 
-		if (addCc != kNever)
+		if (!(addCc == kNever && addOp == kAddNop))
 		{
 			MuxEncoding a = mux_decode((dword >> 9) & 7);
 			MuxEncoding b = mux_decode((dword >> 6) & 7);
@@ -346,7 +351,7 @@ void disassemble(uint64_t dword)
 			if (b == kRfB)
 				printf("b=%ld ", rb);
 		}
-		if (mulCc != kNever)
+		if (!(mulCc == kNever && mulOp == kMulNop))
 		{
 			MuxEncoding a = mux_decode((dword >> 3) & 7);
 			MuxEncoding b = mux_decode(dword & 7);
@@ -376,9 +381,9 @@ void disassemble(uint64_t dword)
 		write_swap(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc);
 		signal(dword);
-		op_mul_add(dword, addCc, mulCc);
+		op_mul_add(dword, addCc, mulCc, addOp, mulOp);
 
-		if (addCc != kNever)
+		if (!(addCc == kNever && addOp == kAddNop))
 		{
 			MuxEncoding a = mux_decode((dword >> 9) & 7);
 			MuxEncoding b = mux_decode((dword >> 6) & 7);
@@ -392,7 +397,7 @@ void disassemble(uint64_t dword)
 			if (b == kRfA || b == kRfB)
 				printf("b=%s%ld ", pMuxEncodingNames[b], rb);
 		}
-		if (mulCc != kNever)
+		if (!(mulCc == kNever && mulOp == kMulNop))
 		{
 			MuxEncoding a = mux_decode((dword >> 3) & 7);
 			MuxEncoding b = mux_decode(dword & 7);
@@ -432,7 +437,7 @@ int main(int argc, char *argv[])
 			return -1;
 
 		uint64_t dword;
-		unsigned int address;
+		unsigned int address = 0;
 
 		while (fread(&dword, 8, 1, fp) == 1)
 		{

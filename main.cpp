@@ -6,6 +6,7 @@
  */
 
 #include <stdio.h>
+#include <assert.h>
 #include <stdint.h>
 
 unsigned int code[] = {
@@ -22,6 +23,29 @@ enum ConditionCode
 	kNclear,
 	kCset,
 	kCclear
+};
+
+enum BranchCondition
+{
+	kAllZSet = 0,
+	kAllZClear,
+
+	kAnyZSet,
+	kAnyZClear,
+
+	kAllNSet,
+	kAllNClear,
+
+	kAnyNSet,
+	kAnyNClear,
+
+	kAllCSet,
+	kAllCClear,
+
+	kAnyCSet,
+	kAnyCClear,
+
+	kAlwaysBr = 15,
 };
 
 enum Signal
@@ -118,6 +142,32 @@ const char *pConditionCodeNames[8] = {
 		"cc",
 };
 
+const char *pBranchConditionNames[16] = {
+	"allzs",
+	"allzc",
+
+	"anyzs",
+	"anyzc",
+
+	"allns",
+	"allnc",
+
+	"anyns",
+	"anync",
+
+	"allcs",
+	"allcc",
+
+	"anycs",
+	"anycc",
+
+	"RESERVED",
+	"RESERVED",
+	"RESERVED",
+
+	""
+};
+
 const char *pSignalNames[16] = {
 		"Breakpoint",
 		"NoSignal",
@@ -182,12 +232,22 @@ const char *pMulOpNames[8] = {
 		"v8subs",
 };
 
+const char *pSmallImm[64] = {
+	"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+	"-16", "-15", "-14", "-13", "-12", "-11", "-10", "-9", "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1",
+	"1.0","2.0", "4.0", "8.0", "16.0", "32.0", "64.0", "128.0",
+	"1.0/256.0", "1.0/128.0", "1.0/64.0", "1.0/32.0", "1.0/16.0", "1.0/8.0", "1.0/4.0", "1.0/2.0",
+	"vecrot acc5", "vecrot 1", "vecrot 2", "vecrot 3", "vecrot 4", "vecrot 5", "vecrot 6", "vecrot 7", "vecrot 8", "vecrot 9", "vecrot 10", "vecrot 11", "vecrot 12", "vecrot 13", "vecrot 14", "vecrot 15"
+};
+
 void packunpack(uint64_t dword)
 {
 	uint64_t pack, unpack;
 
 	pack = (dword >> 52) & 0xf;
 	unpack = (dword >> 57) & 0x7;
+
+	assert(pack == 0 && unpack == 0);
 
 	if (0)
 		if (pack || unpack)
@@ -324,20 +384,24 @@ void emit_alu(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, cons
 		fprintf(stderr, "ra");
 	fprintf(stderr, "%d, ", dest);
 
-	if (muxA == kRfA || muxA == kRfB)
+	if (muxA == kRfA)
 		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], ra);
+	else if (muxA == kRfB)
+		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], rb);
 	else
 		fprintf(stderr, "%s", pMuxEncodingNames[muxA]);
 
 	fprintf(stderr, ", ");
 
-	if (muxB == kRfA || muxB == kRfB)
+	if (muxB == kRfA)
+		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxB], ra);
+	else if (muxB == kRfB)
 		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxB], rb);
 	else
 		fprintf(stderr, "%s", pMuxEncodingNames[muxB]);
 }
 
-void emit_alu_small(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, const char *pOp, MuxEncoding muxA, MuxEncoding muxB, uint64_t ra, uint64_t imm)
+void emit_alu_small(bool isAdd, ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, const char *pOp, MuxEncoding muxA, MuxEncoding muxB, uint64_t ra, uint64_t imm)
 {
 	fprintf(stderr, "%s", pOp);
 	if (setFlags)
@@ -353,20 +417,27 @@ void emit_alu_small(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest
 		fprintf(stderr, "ra");
 	fprintf(stderr, "%d, ", dest);
 
-	if (muxA == kRfA || muxA == kRfB)
+	if (muxA == kRfA)
 		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], ra);
+	else if (muxA == kRfB)
+		assert(0);
 	else
 		fprintf(stderr, "%s", pMuxEncodingNames[muxA]);
 
 	fprintf(stderr, ", ");
-
+	
 	if (muxB == kRfA || muxB == kRfB)
-		fprintf(stderr, "%ld", imm);
+		fprintf(stderr, "%s", pSmallImm[imm]);
 	else
+	{
 		fprintf(stderr, "%s", pMuxEncodingNames[muxB]);
+
+		if (!isAdd)
+			fprintf(stderr, " %s", pSmallImm[imm]);
+	}
 }
 
-void disassemble(uint64_t dword)
+bool disassemble(uint64_t dword, uint32_t address)
 {
 	ConditionCode addCc, mulCc;
 	AddOp addOp;
@@ -377,13 +448,19 @@ void disassemble(uint64_t dword)
 
 	if ((dword >> 57) == 0x74)
 	{
-		fprintf(stderr, "semaphore\n");
-		packunpack(dword);
 		cond_add_mul(dword, addCc, mulCc);
-		set_flags(dword);
-		write_swap(dword);
+		flags = set_flags(dword);
+		swap = write_swap(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
-		fprintf(stderr, "\n");
+
+		assert(addCc == kNever && mulCc == kNever);
+
+		uint32_t sem = (uint32_t)(dword & 15);
+		bool inc = (bool)((dword >> 4) & 1);
+
+		fprintf(stderr, "sem %d, %s\n", sem, inc ? "inc" : "dec");
+
+		return true;
 	}
 	else if ((dword >> 57) == 0x73)
 	{
@@ -393,6 +470,7 @@ void disassemble(uint64_t dword)
 		set_flags(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
 		fprintf(stderr, "\n");
+		return false;
 	}
 	else if ((dword >> 57) == 0x71)
 	{
@@ -403,6 +481,7 @@ void disassemble(uint64_t dword)
 		write_swap(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
 		fprintf(stderr, "\n");
+		return false;
 	}
 	else if ((dword >> 57) == 0x70)
 	{
@@ -412,8 +491,6 @@ void disassemble(uint64_t dword)
 		swap = write_swap(dword);
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
 		uint32_t imm = immediate32(dword);
-
-		fprintf(stderr, "\n");
 
 		if (addCc != kNever)
 			emit_il(addCc, flags, swap, destAdd, imm);
@@ -425,14 +502,39 @@ void disassemble(uint64_t dword)
 		}
 
 		fprintf(stderr, "\n");
-		fflush(stdout);
+		return true;
 	}
 	else if (((dword >> 57) & 0x78) == 0x78)
 	{
-		fprintf(stderr, "branch\n");
-		write_swap(dword);
+		swap = write_swap(dword);
 		waddr(dword, write_swap(dword), kAlways, kAlways, destAdd, destMul);
+		bool rel = (bool)((dword >> 51) & 1);
+		bool reg = (bool)((dword >> 50) & 1);
+		BranchCondition cc = (BranchCondition)((dword >> 52) & 15);
+		uint64_t raddr = (dword >> 45) & 31;
+		uint32_t imm = immediate32(dword);
+
+		fprintf(stderr, "bl");
+		if (!rel)
+			fprintf(stderr, "a");
+		fprintf(stderr, "%s", pBranchConditionNames[cc]);
+
+		fprintf(stderr, " %s%d, %s%d, ",
+			swap ? "rb" : "ra", destAdd,
+			swap ? "ra" : "rb", destMul);
+
+		if (reg)
+		{
+			fprintf(stderr, "ra%ld", raddr);
+			if (imm)
+				fprintf(stderr, ", ");
+		}
+
+		if (imm || !reg)
+			fprintf(stderr, "%ld", imm);
+
 		fprintf(stderr, "\n");
+		return true;
 	}
 	else if (((dword >> 57) & 0x78) == 0x68)
 	{
@@ -445,11 +547,9 @@ void disassemble(uint64_t dword)
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
 		op_mul_add(dword, addCc, mulCc, addOp, mulOp);
 
-		printf("\n");
-
 		if (!(addCc == kNever && addOp == kAddNop))
 		{
-			emit_alu_small(addCc, flags, swap, destAdd, pAddOpNames[addOp],
+			emit_alu_small(true, addCc, flags, swap, destAdd, pAddOpNames[addOp],
 					mux_decode((dword >> 9) & 7), mux_decode((dword >> 6) & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
@@ -460,8 +560,8 @@ void disassemble(uint64_t dword)
 			if (have_prev)
 				fprintf(stderr, "; ");
 
-			emit_alu_small(mulCc, flags, !swap, destMul, pMulOpNames[mulOp],
-					mux_decode((dword >> 9) & 7), mux_decode((dword >> 6) & 7),
+			emit_alu_small(false, mulCc, flags, !swap, destMul, pMulOpNames[mulOp],
+					mux_decode((dword >> 3) & 7), mux_decode(dword & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
 		}
@@ -470,6 +570,7 @@ void disassemble(uint64_t dword)
 			fprintf(stderr, "nop");
 
 		fprintf(stderr, "\n");
+		return true;
 	}
 	else
 	{
@@ -482,8 +583,6 @@ void disassemble(uint64_t dword)
 		waddr(dword, write_swap(dword), addCc, mulCc, destAdd, destMul);
 		Signal sig = signal(dword);
 		op_mul_add(dword, addCc, mulCc, addOp, mulOp);
-
-		printf("\n");
 
 		if (!(addCc == kNever && addOp == kAddNop))
 		{
@@ -499,7 +598,7 @@ void disassemble(uint64_t dword)
 				fprintf(stderr, "; ");
 
 			emit_alu(mulCc, flags, !swap, destMul, pMulOpNames[mulOp],
-					mux_decode((dword >> 9) & 7), mux_decode((dword >> 6) & 7),
+					mux_decode((dword >> 3) & 7), mux_decode(dword & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
 		}
@@ -515,6 +614,7 @@ void disassemble(uint64_t dword)
 			fprintf(stderr, "nop");
 
 		fprintf(stderr, "\n");
+		return true;
 	}
 }
 
@@ -527,8 +627,8 @@ int main(int argc, char *argv[])
 			unsigned int address = count * 8;
 
 			uint64_t dword = ((uint64_t)code[count * 2 + 1] << 32) | (uint64_t)code[count * 2];
-			fprintf(stderr, "%5x: %016lx\n", address, dword);
-			disassemble(dword);
+			if (!disassemble(dword, address))
+				fprintf(stderr, "%5x: %016lx\n", address, dword);
 		}
 
 		return 0;
@@ -545,8 +645,8 @@ int main(int argc, char *argv[])
 		while (fread(&dword, 8, 1, fp) == 1)
 		{
 			fprintf(stderr, "%5x: %016lx\n", address, dword);
+			disassemble(dword, address);
 			address += 8;
-			disassemble(dword);
 		}
 
 		return 0;

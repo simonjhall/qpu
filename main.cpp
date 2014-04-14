@@ -15,127 +15,6 @@ unsigned int code[] = {
 #include "shader_256.hex"
 };
 
-const char *pMuxEncodingNames[8] = {
-		"acc0",
-		"acc1",
-		"acc2",
-		"acc3",
-		"acc4",
-		"acc5",
-		"ra",
-		"rb",
-};
-
-const char *pConditionCodeNames[8] = {
-		"never",
-		"al",
-		"zs",
-		"zc",
-		"ns",
-		"nc",
-		"cs",
-		"cc",
-};
-
-const char *pBranchConditionNames[16] = {
-	"allzs",
-	"allzc",
-
-	"anyzs",
-	"anyzc",
-
-	"allns",
-	"allnc",
-
-	"anyns",
-	"anync",
-
-	"allcs",
-	"allcc",
-
-	"anycs",
-	"anycc",
-
-	"RESERVED",
-	"RESERVED",
-	"RESERVED",
-
-	""
-};
-
-const char *pSignalNames[16] = {
-		"Breakpoint",
-		"NoSignal",
-		"ThreadSwitch",
-		"ProgramEnd",
-		"ScoreboardWait",
-		"ScoreboardUnlock",
-		"LastThreadSwitch",
-		"CoverageLoad",
-		"ColourLoad",
-		"ColourLoadPe",
-		"LoadTmu0",
-		"LoadTmu1",
-		"AlphaMaskLoad",
-		"SmallImmOrVecRot",
-		"LoadImm",
-		"Branch",
-};
-
-const char *pAddOpNames[32] = {
-		"addnop",
-		"fadd",
-		"fsub",
-		"fmin",
-		"fmax",
-		"fminabs",
-		"fmaxabs",
-		"ftoi",
-		"itof",
-		"reserved",
-		"reserved",
-		"reserved",
-		"add",
-		"sub",
-		"shr",
-		"asr",
-		"ror",
-		"shl",
-		"min",
-		"max",
-		"and",
-		"or",
-		"xor",
-		"not",
-		"clz",
-		"reserved",
-		"reserved",
-		"reserved",
-		"reserved",
-		"reserved",
-		"addv8adds",
-		"addv8subs",
-};
-
-const char *pMulOpNames[8] = {
-		"mulnop",
-		"fmul",
-		"mul24",
-		"v8muld",
-		"v8min",
-		"v8max",
-		"mulv8adds",
-		"mulv8subs",
-};
-
-const char *pSmallImm[64] = {
-	"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
-	"-16", "-15", "-14", "-13", "-12", "-11", "-10", "-9", "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1",
-	"1.0","2.0", "4.0", "8.0", "16.0", "32.0", "64.0", "128.0",
-	"1.0/256.0", "1.0/128.0", "1.0/64.0", "1.0/32.0", "1.0/16.0", "1.0/8.0", "1.0/4.0", "1.0/2.0",
-	"vecrot acc5", "vecrot 1", "vecrot 2", "vecrot 3", "vecrot 4", "vecrot 5", "vecrot 6", "vecrot 7", "vecrot 8", "vecrot 9", "vecrot 10", "vecrot 11", "vecrot 12", "vecrot 13", "vecrot 14", "vecrot 15"
-};
-
 void packunpack(uint64_t dword)
 {
 	uint64_t pack, unpack;
@@ -168,7 +47,7 @@ void cond_add_mul(uint64_t dword, ConditionCode &rAdd, ConditionCode &rMul)
 	rMul = (ConditionCode)mul;
 
 	if (0)
-		fprintf(stderr, "cond_add=%s cond_mul=%s ", pConditionCodeNames[add], pConditionCodeNames[mul]);
+		fprintf(stderr, "cond_add=%s cond_mul=%s ", GetConditionCodeName(rAdd), GetConditionCodeName(rMul));
 }
 
 bool set_flags(uint64_t dword)
@@ -215,7 +94,7 @@ Signal signal(uint64_t dword)
 {
 	if (0)
 		if ((Signal)(dword >> 60) != kNoSignal)
-			fprintf(stderr, "sig=%s ", pSignalNames[dword >> 60]);
+			fprintf(stderr, "sig=%s ", GetSignalName((Signal)(dword >> 60)));
 
 	return (Signal)(dword >> 60);
 }
@@ -228,9 +107,9 @@ void op_mul_add(uint64_t dword, ConditionCode enableA, ConditionCode enableB, Ad
 	if (0)
 	{
 		if (!(enableA == kNever && rAdd == kAddNop))
-			fprintf(stderr, "addop=%s ", pAddOpNames[(dword >> 24) & 31]);
+			fprintf(stderr, "addop=%s ", GetAddOpName((AddOp)((dword >> 24) & 31)));
 		if (!(enableB == kNever && rMul == kMulNop))
-			fprintf(stderr, "mulop=%s ", pMulOpNames[(dword >> 29) & 7]);
+			fprintf(stderr, "mulop=%s ", GetMulOpName((MulOp)((dword >> 29) & 7)));
 
 		if (rAdd == kAddNop && rMul == kMulNop)
 			fprintf(stderr, "nop \n");
@@ -241,7 +120,7 @@ MuxEncoding mux_decode(uint64_t section)
 {
 	MuxEncoding m = (MuxEncoding)section;
 	if (0)
-		fprintf(stderr, "%s ", pMuxEncodingNames[section]);
+		fprintf(stderr, "%s ", GetMuxEncodingName(m));
 	return m;
 }
 
@@ -249,7 +128,7 @@ void emit_il(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, uint3
 {
 	fprintf(stderr, "il");
 	if (cc != kAlways)
-		fprintf(stderr, "%s", pConditionCodeNames[cc]);
+		fprintf(stderr, "%s", GetConditionCodeName(cc));
 	if (setFlags)
 		fprintf(stderr, "s");
 
@@ -270,7 +149,7 @@ void emit_alu(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, cons
 	if (setFlags)
 		fprintf(stderr, "s");
 	if (cc != kAlways)
-		fprintf(stderr, "%s", pConditionCodeNames[cc]);
+		fprintf(stderr, "%s", GetConditionCodeName(cc));
 
 	fprintf(stderr, " ");
 
@@ -281,20 +160,20 @@ void emit_alu(ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, cons
 	fprintf(stderr, "%d, ", dest);
 
 	if (muxA == kRfA)
-		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], ra);
+		fprintf(stderr, "%s%ld", GetMuxEncodingName(muxA), ra);
 	else if (muxA == kRfB)
-		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], rb);
+		fprintf(stderr, "%s%ld", GetMuxEncodingName(muxA), rb);
 	else
-		fprintf(stderr, "%s", pMuxEncodingNames[muxA]);
+		fprintf(stderr, "%s", GetMuxEncodingName(muxA));
 
 	fprintf(stderr, ", ");
 
 	if (muxB == kRfA)
-		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxB], ra);
+		fprintf(stderr, "%s%ld", GetMuxEncodingName(muxB), ra);
 	else if (muxB == kRfB)
-		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxB], rb);
+		fprintf(stderr, "%s%ld", GetMuxEncodingName(muxB), rb);
 	else
-		fprintf(stderr, "%s", pMuxEncodingNames[muxB]);
+		fprintf(stderr, "%s", GetMuxEncodingName(muxB));
 }
 
 void emit_alu_small(bool isAdd, ConditionCode cc, bool setFlags, bool swapOut, uint32_t dest, const char *pOp, MuxEncoding muxA, MuxEncoding muxB, uint64_t ra, uint64_t imm)
@@ -303,7 +182,7 @@ void emit_alu_small(bool isAdd, ConditionCode cc, bool setFlags, bool swapOut, u
 	if (setFlags)
 		fprintf(stderr, "s");
 	if (cc != kAlways)
-		fprintf(stderr, "%s", pConditionCodeNames[cc]);
+		fprintf(stderr, "%s", GetConditionCodeName(cc));
 
 	fprintf(stderr, " ");
 
@@ -314,22 +193,22 @@ void emit_alu_small(bool isAdd, ConditionCode cc, bool setFlags, bool swapOut, u
 	fprintf(stderr, "%d, ", dest);
 
 	if (muxA == kRfA)
-		fprintf(stderr, "%s%ld", pMuxEncodingNames[muxA], ra);
+		fprintf(stderr, "%s%ld", GetMuxEncodingName(muxA), ra);
 	else if (muxA == kRfB)
 		assert(0);
 	else
-		fprintf(stderr, "%s", pMuxEncodingNames[muxA]);
+		fprintf(stderr, "%s", GetMuxEncodingName(muxA));
 
 	fprintf(stderr, ", ");
 	
 	if (muxB == kRfA || muxB == kRfB)
-		fprintf(stderr, "%s", pSmallImm[imm]);
+		fprintf(stderr, "%s", GetSmallImm(imm));
 	else
 	{
-		fprintf(stderr, "%s", pMuxEncodingNames[muxB]);
+		fprintf(stderr, "%s", GetMuxEncodingName(muxB));
 
 		if (!isAdd)
-			fprintf(stderr, " %s", pSmallImm[imm]);
+			fprintf(stderr, " %s", GetSmallImm(imm));
 	}
 }
 
@@ -413,7 +292,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 		fprintf(stderr, "bl");
 		if (!rel)
 			fprintf(stderr, "a");
-		fprintf(stderr, "%s", pBranchConditionNames[cc]);
+		fprintf(stderr, "%s", GetBranchConditionName(cc));
 
 		fprintf(stderr, " %s%d, %s%d, ",
 			swap ? "rb" : "ra", destAdd,
@@ -445,7 +324,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 
 		if (!(addCc == kNever && addOp == kAddNop))
 		{
-			emit_alu_small(true, addCc, flags, swap, destAdd, pAddOpNames[addOp],
+			emit_alu_small(true, addCc, flags, swap, destAdd, GetAddOpName(addOp),
 					mux_decode((dword >> 9) & 7), mux_decode((dword >> 6) & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
@@ -456,7 +335,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 			if (have_prev)
 				fprintf(stderr, "; ");
 
-			emit_alu_small(false, mulCc, flags, !swap, destMul, pMulOpNames[mulOp],
+			emit_alu_small(false, mulCc, flags, !swap, destMul, GetMulOpName(mulOp),
 					mux_decode((dword >> 3) & 7), mux_decode(dword & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
@@ -482,7 +361,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 
 		if (!(addCc == kNever && addOp == kAddNop))
 		{
-			emit_alu(addCc, flags, swap, destAdd, pAddOpNames[addOp],
+			emit_alu(addCc, flags, swap, destAdd, GetAddOpName(addOp),
 					mux_decode((dword >> 9) & 7), mux_decode((dword >> 6) & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
@@ -493,7 +372,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 			if (have_prev)
 				fprintf(stderr, "; ");
 
-			emit_alu(mulCc, flags, !swap, destMul, pMulOpNames[mulOp],
+			emit_alu(mulCc, flags, !swap, destMul, GetMulOpName(mulOp),
 					mux_decode((dword >> 3) & 7), mux_decode(dword & 7),
 					(dword >> 18) & 63, (dword >> 12) & 63);
 			have_prev = true;
@@ -503,7 +382,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 		{
 			if (have_prev)
 				fprintf(stderr, "; ");
-			fprintf(stderr, "%s", pSignalNames[sig]);
+			fprintf(stderr, "%s", GetSignalName(sig));
 		}
 
 		if (!have_prev && sig == kNoSignal)		//we have nothing

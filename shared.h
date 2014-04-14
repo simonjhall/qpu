@@ -20,6 +20,29 @@ enum ConditionCode
 	kCclear
 };
 
+enum BranchCondition
+{
+	kAllZSet = 0,
+	kAllZClear,
+
+	kAnyZSet,
+	kAnyZClear,
+
+	kAllNSet,
+	kAllNClear,
+
+	kAnyNSet,
+	kAnyNClear,
+
+	kAllCSet,
+	kAllCClear,
+
+	kAnyCSet,
+	kAnyCClear,
+
+	kAlwaysBr = 15,
+};
+
 enum Signal
 {
 	kBreakpoint = 0,
@@ -79,6 +102,19 @@ enum MulOp
 	kV8addsMul,
 	kV8subsMul,
 };
+
+enum MuxEncoding
+{
+	kAcc0 = 0,
+	kAcc1,
+	kAcc2,
+	kAcc3,
+	kAcc4,
+	kAcc5,
+	kRfA,
+	kRfB,
+};
+
 
 
 #endif /* SHARED_H_ */

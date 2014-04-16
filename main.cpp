@@ -233,7 +233,7 @@ bool disassemble(uint64_t dword, uint32_t address)
 		uint32_t sem = (uint32_t)(dword & 15);
 		bool inc = (bool)((dword >> 4) & 1);
 
-		fprintf(stderr, "sem %d, %s\n", sem, inc ? "inc" : "dec");
+		fprintf(stderr, "sem %d, %s\n", sem, !inc ? "inc" : "dec");
 
 		return true;
 	}
